@@ -1,18 +1,18 @@
 #ifndef Structs_h
 #define Structs_h
 
-struct position{ 
+typedef struct{ 
   float lat;
   float lon;
-};
+}position;
 
-struct vector{ 
+typedef struct { 
   float angle;
   float distance;
-};
+}vector;
 
-struct servo_data{
+typedef struct {
 	int servo;
 	int motor;
-};
+}servo_data;
 #endif

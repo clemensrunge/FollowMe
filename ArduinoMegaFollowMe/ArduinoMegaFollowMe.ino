@@ -1,5 +1,6 @@
 #include "BTApp.h"
 #include "Drive.h"
+#include "MechaQMC5883.h"
 #include "Raspi.h"
 #include "Servo_read.h"
 #include <TinyGPS.h>
@@ -14,31 +15,33 @@ void angle_test_mode();
 void camera_mode();
 void gps_mode();
 
-#define SERVO_SYNC_IN A1
-#define SERVO_SYNC_ERROR A2
-#define BTRX 10
-#define BTTX 11
-#define RASPIRX 6
-#define RASPITX 7
+#define SERVO_SYNC_IN 52
+#define SERVO_SYNC_ERROR 53
+#define DEBUG_PIN 50
 
-BTApp btapp;
-Drive drive;
-Raspi raspi;
-Servo_read servo_read;
-bool mainloop_sync;
-TinyGPS gps;
+BTApp btapp = BTApp(ANGLETEST);
+Drive drive = Drive();
+MechaQMC5883 compass;
+Raspi raspi = Raspi();
+Servo_read servo_read = Servo_read();
+
+TinyGPS gps = TinyGPS();
 
 void setup() {
-  btapp = BTApp(TEST);
-  drive = Drive();
-  raspi = Raspi();
-  servo_read = Servo_read();
-  TinyGPS gps = TinyGPS();
-  Serial.begin(115200, SERIAL_8N1);  //HOST PC
-  Serial1.begin(115200, SERIAL_8N1); //BT Module
+  Serial.begin(115200, SERIAL_8N1);  //HOST PC, RASPI
+
   Serial2.begin(9600, SERIAL_8N1);   //GPS Module
-  Serial3.begin(115200, SERIAL_8N1); //Raspi
-  Serial.println("[INFO] setup done")
+  Serial3.begin(115200, SERIAL_8N1); //BTModule
+  Serial.println("[INFO] serial setup done ");
+
+  servo_read.init();
+  drive.init();
+  compass.init(); //qmc.setMode(Mode_Continuous,ODR_200Hz,RNG_2G,OSR_256);
+  compass.setMode(Mode_Continuous,ODR_200Hz,RNG_2G,OSR_512);
+  
+  pinMode(SERVO_SYNC_IN, INPUT);
+  pinMode(DEBUG_PIN, OUTPUT);
+  Serial.println("[INFO] car setup done ");
 }
 
 void loop() {
@@ -49,40 +52,53 @@ void loop() {
     case ANGLETEST: angle_test_mode(); break;
     case CAMERA: camera_mode(); break;
     case GPS: gps_mode(); break;
+    //case START_CALIBRATION: drive.start_calibration(); btapp.set_mode(TEST); break;;
+    //case STOP_CALIBRATION: drive.end_calibration(); btapp.set_mode(TEST); break;
   }
 }
 
 void servo_sync()
 {
-  static bool mainloop_sync = false;
-  unsigned long time_start = millis();  
-  while(digitalRead(SERVO_SYNC_IN)) 
+  bool mainloop_sync = false;
+  unsigned long time_start = millis();
+  digitalWrite(DEBUG_PIN,HIGH); 
+  while(true)
   {
-    mainloop_sync = true;
-  }
-  if(mainloop_sync)
-  {
-    mainloop_sync = false;
-    return;
-  }
-  else
-  {
-    asynchron_tasks();
-    if(30 > time_start - millis())
-    {     
-      Serial.print("[ERROR] No Servo Sync Pulse on Pin ");
-      Serial.print(SERVO_SYNC_IN);
-      Serial.println(".");
-      delay(1000);
+    while(true == digitalRead(SERVO_SYNC_IN)) 
+    {
+      mainloop_sync = true;
+    }
+    if(mainloop_sync)
+    {
+      digitalWrite(DEBUG_PIN,LOW);
+      return;
+    }
+    else
+    {
+      asynchron_tasks();
+      if(30 < millis()- time_start)
+      {     
+        Serial.print("[ERROR] No Servo Sync Pulse on Pin ");
+        Serial.print(SERVO_SYNC_IN);
+        Serial.println(".");
+        delay(1000);
+      }
     }
   }
 }
 
 void asynchron_tasks()
 {
-  if(Serial1.available())
+  if(Serial.available())
   {
-    btapp.new_data(Serial1.read());
+    btapp.new_data(Serial.read());
+  }
+  
+  if(compass.available())
+  {
+    //Serial.println("c");
+    compass.newData();
+    
   }
 }
 
@@ -110,24 +126,43 @@ void test_mode()
     Serial.println(newServoData.servo);
     drive.set_servo(newServoData.servo);
     drive.set_motor(newServoData.motor);
-      
-    /*
-    int pulselen;
-      setServoPulse(SERVO, 0);
-      Serial.println(" Ausschlag von -100 (rückwärts) bis 100 (vorwärts)");
-      while(Serial.available() == 0); // Wartet auf eingegebenen Wert, da parseInt Timeout hat
-      pulselen = Serial.parseInt();
-      setServoPulse(MOTOR, pulselen);
-      Serial.println(pulselen);
-      */
+    drive.update(compass);
+  }
+}
+
+void calibrate_compass()
+{
+  while(TEST == btapp.get_mode())
+  {
+    
   }
 }
 
 void angle_test_mode()
 {
+  vector destination;
+  destination.angle = 180.0f;
+  destination.distance = 2;
+  servo_data newServoData;
+  Serial.println("[INFO] starting mode: ANGLETEST");
   while(ANGLETEST == btapp.get_mode())
   {
-    servo_sync();
+    servo_sync();    
+    servo_read.get_servo_data(&newServoData);
+    destination.angle += (float)newServoData.servo/100.0;
+    if( 360 < destination.angle)
+    {
+      destination.angle = 0.0f;
+    }      
+    if( 0 > destination.angle)
+    {
+      destination.angle = 360.0f;
+    }
+    Serial.print("T:");
+    Serial.print(destination.angle);
+    drive.set_vector(&destination);
+    drive.set_motor(newServoData.motor);
+    drive.update(compass);
     /*
      * int CompassAngle; 
       setServoPulse(MOTOR, MotorRecieved); 
@@ -139,7 +174,7 @@ void angle_test_mode()
 }
 void gps_test_mode()
 {
-  
+  Serial.println("[INFO] starting mode: GPSTEST");
   while(GPSTEST == btapp.get_mode())
   {
     servo_sync();
@@ -183,6 +218,7 @@ void gps_test_mode()
 
 void camera_mode()
 {
+  Serial.println("[INFO] starting mode: CAMERA");
   while(CAMERA == btapp.get_mode())
   {
     servo_sync();
@@ -192,6 +228,7 @@ void camera_mode()
 
 void gps_mode()
 {
+  Serial.println("[INFO] starting mode: GPS");
   while(GPS == btapp.get_mode())
   {
     servo_sync();

@@ -2,30 +2,35 @@
 
 Drive::Drive()
 {
-	Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
-	TinyGPS gpsmath = TinyGPS();
-	MechaQMC5883 compass = MechaQMC5883();
-	current_pos.lat = 0.0f;
-	current_pos.lon = 0.0f;
-	destination.lat = 0.0f;
-	destination.lon = 0.0f;
-	manual_motor = false;
-	manual_motor_speed = 0;
-	compass.init(); //qmc.setMode(Mode_Continuous,ODR_200Hz,RNG_2G,OSR_256);
-	pwm.begin();
-	pwm.setPWMFreq(60);  // Analog servos run at ~60 Hz updates	
-	pwm.setPWM(SYNC, 0, 463); //ca. 2ms SYNC pulse
+  pwm = Adafruit_PWMServoDriver();
+  gpsmath = TinyGPS();
   sdata.servo = 0;
   sdata.motor = 0;
-  write_servo_data();
+  toDest.angle = 0.0f;
+  toDest.distance = 0.0f;
   calc_motor = false;  
   calc_position = false;
-  eval_compass = false;  
+  eval_compass = false;
+  current_pos.lat = 0.0f;
+  current_pos.lon = 0.0f;
+  destination.lat = 0.0f;
+  destination.lon = 0.0f;
+  manual_motor = false;
+  manual_motor_speed = 0;
 }
 
-void Drive::set_current_pos(position current)
+void Drive::init()
 {
-	current_pos = current;
+  pwm.begin();
+  pwm.setPWMFreq(60);  // Analog servos run at ~60 Hz updates 
+  pwm.setPWM(SYNC, 0, 463); //ca. 2ms SYNC pulse
+  write_servo_data();
+}
+
+
+void Drive::set_current_pos(position *current)
+{
+	current_pos = *current;
 	if(destination.lat != 0.0)
 	{
 		eval_compass = true;
@@ -33,9 +38,9 @@ void Drive::set_current_pos(position current)
 	}
 }
 
-void Drive::set_target_pos(position target)
+void Drive::set_target_pos(position *target)
 {
-	destination = target;
+	destination = *target;
 	if(current_pos.lat != 0.0)
 	{
 		eval_compass = true;
@@ -43,26 +48,27 @@ void Drive::set_target_pos(position target)
 	}
 }
 
-void Drive::set_vector(vector to_target)
+void Drive::set_vector(vector *to_target)
 {
   calc_position = false;
-  eval_compass = true;  
+  eval_compass = true;
+  toDest = *to_target;
 }
 
-void Drive::set_servo(byte servo)
+void Drive::set_servo(int servo)
 {
   eval_compass = false;
   calc_position = false;
   sdata.servo = servo;
 }
 
-void Drive::set_motor(byte motor)
+void Drive::set_motor(int motor)
 {
   calc_motor = false;
   sdata.motor = motor;
 }
 
-void Drive::update()
+void Drive::update(MechaQMC5883 compass)
 {
   int x, y, z;
   int azimuth;
@@ -77,8 +83,12 @@ void Drive::update()
 
   if(eval_compass)
   {
+    int x,y,z;
+    float azimuth;
     // Kompass auslesen
     compass.read(&x, &y, &z, &azimuth);
+    Serial.print(" C:");
+    Serial.println(azimuth);
     //servo daten berechnen
     nextAngle = toDest.angle - azimuth; 
     if(nextAngle < -180){
@@ -125,17 +135,15 @@ void Drive::update()
 
 void Drive::write_servo_data()
 {
-  double pulselength;
-  pulselength = 17710;   // 17,710 us per second 
-  pulselength /= 4096;  // 12 bits of resolution
+  float pulselength;
+  int temp;
+  
   // Servo
-  sdata.servo = map(sdata.servo, -100, 100, SERVOMAX, SERVOMIN);
-  sdata.servo /= pulselength;
-  pwm.setPWM(0, 0, sdata.servo); 
+  temp = int(float(map(sdata.servo, -100, 100, SERVOMAX, SERVOMIN))/PULSELENGTH);
+  pwm.setPWM(SERVO, 0, temp);
   // Motor
-  sdata.motor = map(sdata.motor, -100, 100, MOTORMAX, MOTORMIN);
-  sdata.motor /= pulselength;
-  pwm.setPWM(1, 0, sdata.motor);
+  temp = int(float(map(sdata.motor, -100, 100, MOTORMAX, MOTORMIN))/PULSELENGTH);
+  pwm.setPWM(MOTOR, 0, temp);
 }
 
 

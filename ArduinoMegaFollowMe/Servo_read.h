@@ -11,12 +11,11 @@
 #define ReceiverIntPinMotor 2
 #define ReceiverIntPinServo 3
 
-
-
 class Servo_read
-{  
+{ 
+  bool no_signal; 
 public:
-  Servo_read();
+  void init();
   void get_servo_data(servo_data *sdata);
 };
 #endif

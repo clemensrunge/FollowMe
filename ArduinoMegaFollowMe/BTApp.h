@@ -13,25 +13,30 @@
 #define ANGLETEST 3
 #define CAMERA 4
 #define GPS 5
+#define START_CALIBRATION 6
+#define STOP_CALIBRATION 7
 
-#define BTDRIVE 100
-#define BTSWITCH 99
-#define BTSTOP 115
-#define BTPOSITION 112
+#define BTDRIVE 'd'
+#define BTSWITCH 'c'
+#define BTSTOP 's'
+#define BTPOSITION 'p'
+#define MODESWITCH 'm'
 
 class BTApp
 {	
 public:
-  BTApp();
+	BTApp();
 	BTApp(int inital_mode);
 	void new_data(char c);
 	int get_mode();
+  void set_mode(byte m);
 	void get_position(position *pos);
 private:
-  bool position_send;
-  byte index;
-  char lon_array[10];
-  char lat_array[10];
+	bool position_send;
+  	bool mode_send;
+  	byte index;
+  	char lon_array[10];
+  	char lat_array[10];
 	byte command;
 	byte mode, last_mode;
 	position destination;	
