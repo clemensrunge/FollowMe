@@ -1,7 +1,7 @@
+#include "Controller.h"
 #include "BTApp.h"
 #include "Drive.h"
 #include "MechaQMC5883.h"
-#include "Raspi.h"
 #include "Servo_read.h"
 #include <TinyGPS.h>
 
@@ -9,6 +9,8 @@ void setup();
 void loop();
 void servo_sync();
 void asynchron_tasks();
+void execute_commands(int c);
+void execute_sensor_request(int r);
 void test_mode();
 void gps_test_mode();
 void angle_test_mode();
@@ -19,10 +21,10 @@ void gps_mode();
 #define SERVO_SYNC_ERROR 53
 #define DEBUG_PIN 50
 
+Controller controller = Controller(M_RC_CAR);
 BTApp btapp = BTApp(ANGLETEST);
 Drive drive = Drive();
 MechaQMC5883 compass;
-Raspi raspi = Raspi();
 Servo_read servo_read = Servo_read();
 
 TinyGPS gps = TinyGPS();
@@ -31,7 +33,7 @@ void setup() {
   Serial.begin(115200, SERIAL_8N1);  //HOST PC, RASPI
 
   Serial2.begin(9600, SERIAL_8N1);   //GPS Module
-  Serial3.begin(115200, SERIAL_8N1); //BTModule
+  Serial3.begin(57600, SERIAL_8N1); //BTModule
   Serial.println("[INFO] serial setup done ");
 
   servo_read.init();
@@ -45,15 +47,11 @@ void setup() {
 }
 
 void loop() {
-  switch(btapp.get_mode()){
-    case STOP: stop_mode(); break;
-    case TEST: test_mode(); break;
-    case GPSTEST: gps_test_mode(); break;
-    case ANGLETEST: angle_test_mode(); break;
-    case CAMERA: camera_mode(); break;
-    case GPS: gps_mode(); break;
-    //case START_CALIBRATION: drive.start_calibration(); btapp.set_mode(TEST); break;;
-    //case STOP_CALIBRATION: drive.end_calibration(); btapp.set_mode(TEST); break;
+  switch(controller.get_mode()){
+    case M_RC_CAR: test_mode(); break;
+    case M_ANGLE: angle_test_mode(); break;
+    case M_CURVE: angle_test_mode(); break;
+    case M_ANGLE_BY_REMOTE: angle_test_mode(); break; 
   }
 }
 
@@ -89,17 +87,89 @@ void servo_sync()
 
 void asynchron_tasks()
 {
-  if(Serial.available())
+  if(Serial3.available())
   {
-    btapp.new_data(Serial.read());
+    int old_mode = btapp.get_mode();
+    btapp.new_data(Serial3.read());
+    if( true == btapp.controls_car() && old_mode != btapp.get_mode())
+    {
+      switch( btapp.get_mode())
+      {
+        case TEST: controller.set_mode(M_RC_CAR, NULL); break;
+        case START: controller.set_command(C_START); break;
+        case STOP: controller.set_command(C_STOP); break;
+        case ANGLETEST: 
+        case CAMERA: break;
+        case GPS: break;
+        case START_CALIBRATION: controller.set_command(C_START_MAG_CAL); break;
+        case STOP_CALIBRATION: controller.set_command(C_FINISH_MAG_CAL); break;
+        case SET_NORTH: controller.set_command(C_SET_MAG_NORTH); break;
+      }
+    }
   }
+
+  /*
+  The Arduino Wire Implementation uses interrupts.
+  The compass needs the Wire library.
+  The Arduino has only one level of interrupts.
+  Therefore the compass evaluation with the Wire library
+  can not take place inside an interrupt-handler, .
+  */
+  if(compass.available()) 
+  {
+    compass.newData();    
+  }
+
+  if(controller.has_commands())
+  {
+    execute_commands(controller.get_next_command());
+  }
+
+  if(controller.has_sensor_request())
+  {
+    execute_sensor_request(controller.get_next_sensor_request());
+  }
+}
+
+void execute_commands(int c)
+{
+  switch(c)
+  {
+    case C_START:
+      drive.enable_output();
+      break;
+    case C_STOP:
+      drive.set_servo(0);
+      drive.set_motor(0);
+      drive.update(compass);
+      drive.disable_output();
+      break;
+    case C_ENABLE_AUTONOMOUS_MOTOR_OUT:
+      drive.set_automatic_motor(true);
+      break;
+    case C_DISABLE_AUTONOMOUS_MOTOR_OUT:
+      drive.set_automatic_motor(false);
+      break;
+    case C_ENABLE_BTAPP_TO_SWITCH_MODE:
+      btapp.set_controls_car(true);
+      break;
+    case C_DISABLE_BTAPP_TO_SWITCH_MODE:
+      btapp.set_controls_car(false);
+      break;
+    case C_START_MAG_CAL:
+      compass.startCalibration();
+      break;
+    case C_FINISH_MAG_CAL:
+      compass.stopCalibration();
+      break;
+    case C_SET_MAG_NORTH:
+      compass.setNorth();
+      break;
+  }
+};
+void execute_sensor_request(int r)
+{
   
-  if(compass.available())
-  {
-    //Serial.println("c");
-    compass.newData();
-    
-  }
 }
 
 void stop_mode()
@@ -172,6 +242,8 @@ void angle_test_mode()
      */
   }
 }
+
+/*
 void gps_test_mode()
 {
   Serial.println("[INFO] starting mode: GPSTEST");
@@ -212,10 +284,12 @@ void gps_test_mode()
         driveDistance(distance);
         }
       
-     */
+     
   }
 }
+*/
 
+/*
 void camera_mode()
 {
   Serial.println("[INFO] starting mode: CAMERA");
@@ -225,14 +299,16 @@ void camera_mode()
 
   }
 }
+*/
 
+/*
 void gps_mode()
 {
   Serial.println("[INFO] starting mode: GPS");
   while(GPS == btapp.get_mode())
   {
     servo_sync();
-    /*
+    
      * Serial.println("Appmodus");
         String data; //GPS Daten der App
         unsigned long age;
@@ -285,6 +361,8 @@ void gps_mode()
       }
     } 
   
-     */
+     
   }
 }
+
+*/

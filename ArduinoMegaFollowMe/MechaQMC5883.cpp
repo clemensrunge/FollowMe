@@ -1,11 +1,5 @@
 #include "MechaQMC5883.h"
 #include <Wire.h>
-
-volatile int qmc_x[N_AVG_DATAPOINTS], qmc_y[N_AVG_DATAPOINTS], qmc_z[N_AVG_DATAPOINTS];
-volatile int qmc_x_max, qmc_x_min, qmc_y_max, qmc_y_min;
-volatile uint8_t qmc_buffer_index;
-volatile bool qmc_buff_ready, qmc_calibration;
-
 boolean MechaQMC5883::available()
 {
   return digitalRead(NEW_DATA_INT_PIN);
@@ -68,8 +62,8 @@ void MechaQMC5883::init(){
   angle_offset = 0;
   qmc_x_max = -32768;
   qmc_x_min = 32767;
-  qmc_y_min = -32768;
-  qmc_y_max = 32767;
+  qmc_y_max = -32768;
+  qmc_y_min = 32767;
 
   pinMode(NEW_DATA_INT_PIN, INPUT);
   digitalWrite(NEW_DATA_INT_PIN, LOW); 
@@ -88,29 +82,55 @@ void MechaQMC5883::startCalibration()
 {
   qmc_x_max = -32768;
   qmc_x_min = 32767;
-  qmc_y_min = -32768;
-  qmc_y_max = 32767;
+  qmc_y_max = -32768;
+  qmc_y_min = 32767;
   qmc_calibration = true;
 }
 
 void MechaQMC5883::stopCalibration()
 {
+  int x,y;
   x_offset = (qmc_x_min+qmc_x_max)/2;
   y_offset = (qmc_y_min+qmc_y_max)/2;
-  if(qmc_x_max - x_offset > qmc_y_max - y_offset)
+  x = qmc_x_max - x_offset;
+  y = qmc_y_max - y_offset;
+  if( x > y)
   {
-      scale = (float)qmc_x_max / (float)qmc_y_max;
+      scale = (float)x / (float)y;
       scale_x = false; //cal.x2 = cal.x; 
   }  
   else
   {
-    scale = (float)qmc_y_max / (float)qmc_x_max;
+    scale = (float)y / (float)x;
     scale_x = true;
   }
   qmc_calibration = false;
+  Serial.print("Calibration End\nxoffset: ");
+  Serial.println(x_offset);
+  Serial.print("yoffset: ");
+  Serial.println(y_offset);
+  Serial.print("scale: ");
+  Serial.println(scale);
+  Serial.print("x_min: ");
+  Serial.println(qmc_x_min);
+  Serial.print("x_max: ");
+  Serial.println(qmc_x_max);
+  Serial.print("y_min: ");
+  Serial.println(qmc_y_min);
+  Serial.print("y_max: ");
+  Serial.println(qmc_y_max);
+  
 }
 
-void MechaQMC5883::setAngleOffset(int a)
+void MechaQMC5883::setNorth()
+{
+  int x,y,z;
+  float azimuth;
+  read(&x, &y, &z, &azimuth);
+  setAngleOffset(azimuth);
+}
+
+void MechaQMC5883::setAngleOffset(float a)
 {
   angle_offset = a;
 }
@@ -131,11 +151,20 @@ void MechaQMC5883::read(int* x,int* y,int* z,float* a){
   
   *x = (int)(x_avg/N_AVG_DATAPOINTS - x_offset);
   *y = (int)(y_avg/N_AVG_DATAPOINTS - y_offset);
-  *a = azimuth(x,y);
+
+  if(true == scale_x)
+  {
+    *x = (int)((float)*x * scale);
+  }
+  else
+  {
+    *y = (int)((float)*y * scale);
+  }
+  *a = azimuth(x,y); //360-x --> invert
 }
 
 float MechaQMC5883::azimuth(int* a, int* b){
-  float azimuth = angle_offset + atan2((int)*a,(int)*b) * 180.0/PI;
+  float azimuth = atan2((int)*a,-(int)*b) * 180.0/PI - angle_offset;
   return azimuth < 0?360 + azimuth:azimuth;
   //return azimuth;
 }

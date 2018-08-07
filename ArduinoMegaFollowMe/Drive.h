@@ -28,7 +28,10 @@ public:
 	void set_target_pos(position *target);
 	void set_vector(vector *toTarget);
 	void set_servo(int servo);
-  void set_motor(int motor);  
+  void set_motor(int motor);
+  void disable_output();
+  void enable_output();
+  void set_automatic_motor(bool m);
 	void update(MechaQMC5883 compass);
 private:
 	position current_pos, destination;
@@ -39,6 +42,7 @@ private:
 	int manual_motor_speed;
 	bool calc_position, eval_compass, calc_motor;
 	bool manual_motor;
+  bool output_on;
   void write_servo_data();
 	void calc_vector();
 	void absolut_angle(float angle);

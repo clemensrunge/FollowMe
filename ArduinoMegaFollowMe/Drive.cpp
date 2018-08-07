@@ -25,6 +25,7 @@ void Drive::init()
   pwm.setPWMFreq(60);  // Analog servos run at ~60 Hz updates 
   pwm.setPWM(SYNC, 0, 463); //ca. 2ms SYNC pulse
   write_servo_data();
+  output_on = true;
 }
 
 
@@ -67,6 +68,21 @@ void Drive::set_motor(int motor)
   calc_motor = false;
   sdata.motor = motor;
 }
+
+void Drive::disable_output()
+{
+  output_on = false;
+};
+
+void Drive::enable_output()
+{
+ output_on = true;  
+};
+
+ void Drive::set_automatic_motor(bool m)
+ {
+  calc_motor = m;
+ };
 
 void Drive::update(MechaQMC5883 compass)
 {
@@ -129,8 +145,11 @@ void Drive::update(MechaQMC5883 compass)
       pulse = map(toDest.distance, 1, 2, 10, 20);
     }
     sdata.motor = pulse;
-  }	
-  write_servo_data();
+  }
+  if(output_on)
+  {
+    write_servo_data();
+  }
 }
 
 void Drive::write_servo_data()

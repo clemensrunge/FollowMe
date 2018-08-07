@@ -48,16 +48,22 @@ void softReset(); //soft RESET
 void startCalibration();
 void stopCalibration();
 
-void setAngleOffset(int a);
+void setAngleOffset(float a);
+void setNorth();
 void read(int* x,int* y,int* z,float* a);
 
 float azimuth(int*a, int* b);
 
 private:
 
-int x_offset, y_offset, angle_offset;
+int qmc_x[N_AVG_DATAPOINTS], qmc_y[N_AVG_DATAPOINTS], qmc_z[N_AVG_DATAPOINTS];
+int qmc_x_max, qmc_x_min, qmc_y_max, qmc_y_min;
+uint8_t qmc_buffer_index;
+bool qmc_buff_ready, qmc_calibration;
+
+int x_offset, y_offset;
 bool scale_x;
-float scale;
+float scale,angle_offset;
 
 void WriteReg(uint8_t Reg,uint8_t val);
 

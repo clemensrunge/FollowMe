@@ -15,8 +15,18 @@ BTApp::BTApp(int inital_mode)
   last_mode = inital_mode;
   position_send = false;
   mode_send = false;
-  
+  modes_controls_car = false;
 }
+
+ bool BTApp::controls_car()
+ {
+  return modes_controls_car;
+ }
+  
+ void BTApp::set_controls_car(bool c)
+ {
+  modes_controls_car = c;
+ }
 
 void BTApp::new_data(char data_byte)
 {
@@ -85,11 +95,14 @@ void BTApp::new_data(char data_byte)
       bool test = false;
       data_byte -= 48;
       test = (data_byte == TEST)||
-             (data_byte == GPSTEST)||
+             (data_byte == START)||
              (data_byte == STOP)||
              (data_byte == ANGLETEST)||
              (data_byte == CAMERA)||
-             (data_byte == GPS);
+             (data_byte == GPS)||
+             (data_byte == START_CALIBRATION) ||
+             (data_byte == STOP_CALIBRATION) ||
+             (data_byte == SET_NORTH);
       if(test)
       {
         mode = data_byte;
